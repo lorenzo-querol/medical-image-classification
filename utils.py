@@ -2,12 +2,8 @@ import os
 import tensorflow as tf
 
 
-def create_model(config):
-    base_model = tf.keras.applications.vgg16.VGG16(
-        weights=None, include_top=False, input_shape=(224, 224, 3)
-    )
-
-    data_augmentation = tf.keras.Sequential(
+def create_data_augmentation():
+    return tf.keras.Sequential(
         [
             tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal"),
             tf.keras.layers.experimental.preprocessing.RandomRotation(0.1),
@@ -15,33 +11,44 @@ def create_model(config):
         ]
     )
 
+
+def create_metrics():
+    return [
+        tf.keras.metrics.Accuracy(),
+        tf.keras.metrics.Precision(),
+        tf.keras.metrics.Recall(),
+        tf.keras.metrics.F1Score(threshold=0.5),
+    ]
+
+
+def create_model(config):
+    base_model = tf.keras.applications.vgg16.VGG16(
+        weights=None, include_top=False, input_shape=(224, 224, 3)
+    )
+
+    data_augmentation = create_data_augmentation()
+
     model = tf.keras.Sequential(
         [
             tf.keras.layers.InputLayer(input_shape=(224, 224, 3)),
             data_augmentation,
             tf.keras.layers.Lambda(tf.keras.applications.vgg16.preprocess_input),
             base_model,
-            tf.keras.layers.GlobalAveragePooling2D(),
-            # tf.keras.layers.Dropout(config["hparams"]["dropout_rate"]),
+            tf.keras.layers.Flatten(),
             tf.keras.layers.Dense(4096, activation="relu"),
             tf.keras.layers.Dense(4096, activation="relu"),
             tf.keras.layers.Dense(1, activation="sigmoid"),
         ]
     )
 
-    print(model.summary())
+    metrics = create_metrics()
 
     model.compile(
         optimizer=tf.keras.optimizers.Adam(
             learning_rate=config["hparams"]["learning_rate"]
         ),
         loss=tf.keras.losses.BinaryCrossentropy(),
-        metrics=[
-            tf.keras.metrics.BinaryAccuracy(),
-            tf.keras.metrics.Precision(),
-            tf.keras.metrics.Recall(),
-            tf.keras.metrics.F1Score(threshold=0.5),
-        ],
+        metrics=metrics,
     )
 
     return model
@@ -64,9 +71,8 @@ def prepare_datasets(train_path, valid_path, config):
         label_mode="binary",
     )
 
-    AUTOTUNE = tf.data.AUTOTUNE
-    train_dataset = train_set.prefetch(buffer_size=AUTOTUNE)
-    valid_dataset = valid_set.prefetch(buffer_size=AUTOTUNE)
+    train_dataset = train_set.prefetch(buffer_size=tf.data.AUTOTUNE)
+    valid_dataset = valid_set.prefetch(buffer_size=tf.data.AUTOTUNE)
 
     return train_dataset, valid_dataset
 
@@ -84,18 +90,3 @@ def get_class_distribution(split):
     print(f"Class Distribution of {split}")
     for class_label, num_samples in class_distribution.items():
         print(f"{class_label}: {num_samples} samples")
-
-
-class estimator:
-    _estimator_type = ""
-    classes_ = []
-
-    def __init__(self, model, classes):
-        self.model = model
-        self._estimator_type = "classifier"
-        self.classes_ = classes
-
-    def predict(self, X):
-        y_prob = self.model.predict(X)
-        y_pred = y_prob.argmax(axis=1)
-        return y_pred
