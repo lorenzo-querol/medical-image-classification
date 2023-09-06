@@ -1,6 +1,6 @@
 config = {
     "hparams": {
-        "batch_size": 32,
+        "batch_size": 16,
         "learning_rate": 1e-4,
         "epochs": 100,
     },

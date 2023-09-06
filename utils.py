@@ -8,44 +8,50 @@ def create_data_augmentation():
             tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal"),
             tf.keras.layers.experimental.preprocessing.RandomRotation(0.1),
             tf.keras.layers.experimental.preprocessing.RandomZoom(0.1),
+            tf.keras.layers.experimental.preprocessing.RandomContrast(factor=0.1),
+            tf.keras.layers.RandomBrightness(factor=0.1),
+            tf.keras.layers.experimental.preprocessing.RandomTranslation(
+                height_factor=0.1, width_factor=0.1
+            ),
         ]
     )
 
 
 def create_metrics():
     return [
-        tf.keras.metrics.Accuracy(),
+        tf.keras.metrics.BinaryAccuracy(name="accuracy"),
         tf.keras.metrics.Precision(),
         tf.keras.metrics.Recall(),
         tf.keras.metrics.F1Score(threshold=0.5),
     ]
 
 
-def create_model(config):
-    base_model = tf.keras.applications.vgg16.VGG16(
-        weights=None, include_top=False, input_shape=(224, 224, 3)
-    )
-
+def create_model(base_model, config):
     data_augmentation = create_data_augmentation()
 
-    model = tf.keras.Sequential(
-        [
-            tf.keras.layers.InputLayer(input_shape=(224, 224, 3)),
-            data_augmentation,
-            tf.keras.layers.Lambda(tf.keras.applications.vgg16.preprocess_input),
-            base_model,
-            tf.keras.layers.Flatten(),
-            tf.keras.layers.Dense(4096, activation="relu"),
-            tf.keras.layers.Dense(4096, activation="relu"),
-            tf.keras.layers.Dense(1, activation="sigmoid"),
-        ]
-    )
+    # Preprocess and augment the data
+    input_tensor = tf.keras.layers.Input(shape=(224, 224, 3))
+    x = data_augmentation(input_tensor)
+    x = tf.keras.layers.experimental.preprocessing.Rescaling(1.0 / 255)(x)
+
+    # # Pass through the feature extractor
+    x = base_model(x)
+
+    # Fully connected layer
+    x = tf.keras.layers.GlobalAveragePooling2D()(x)
+    x = tf.keras.layers.Dropout(0.8, seed=config["seed"])(x)
+    x = tf.keras.layers.Dense(1, activation="sigmoid")(
+        x
+    )  # Replace with sigmoid instead of softmax since binary classification
+
+    # Compile the model
+    model = tf.keras.models.Model(inputs=input_tensor, outputs=x)
 
     metrics = create_metrics()
 
     model.compile(
         optimizer=tf.keras.optimizers.Adam(
-            learning_rate=config["hparams"]["learning_rate"]
+            ema_momentum=0.9, learning_rate=config["hparams"]["learning_rate"]
         ),
         loss=tf.keras.losses.BinaryCrossentropy(),
         metrics=metrics,
@@ -71,10 +77,11 @@ def prepare_datasets(train_path, valid_path, config):
         label_mode="binary",
     )
 
-    train_dataset = train_set.prefetch(buffer_size=tf.data.AUTOTUNE)
-    valid_dataset = valid_set.prefetch(buffer_size=tf.data.AUTOTUNE)
+    AUTOTUNE = tf.data.AUTOTUNE
+    train_set = train_set.cache().prefetch(buffer_size=AUTOTUNE)
+    valid_set = valid_set.cache().prefetch(buffer_size=AUTOTUNE)
 
-    return train_dataset, valid_dataset
+    return train_set, valid_set
 
 
 def get_class_distribution(split):

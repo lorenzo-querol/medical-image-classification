@@ -5,8 +5,8 @@ import os
 from utils import prepare_datasets, create_model
 
 
-def build_config_paths(config):
-    filename = f"vgg16_{datetime.datetime.now()}_e{config['hparams']['epochs']}_lr{config['hparams']['learning_rate']}_bs{config['hparams']['batch_size']}"
+def build_config_paths(config, model_name):
+    filename = f"{model_name}_{datetime.datetime.now()}_e{config['hparams']['epochs']}_lr{config['hparams']['learning_rate']}_bs{config['hparams']['batch_size']}"
     checkpoint_dir = f"checkpoints/{filename}"
     os.makedirs(checkpoint_dir, exist_ok=True)
     checkpoint_path = f"{checkpoint_dir}/cp-{{epoch:04d}}.ckpt"
@@ -22,15 +22,28 @@ def create_callbacks(checkpoint_path, csv_log_path):
     model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_path, save_weights_only=True, save_best_only=True, verbose=1
     )
-    return [early_stopping, csv_logger, model_checkpoint]
+    lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(
+        patience=5, monitor="val_loss", mode="min"
+    )
+
+    return [early_stopping, csv_logger, model_checkpoint, lr_scheduler]
 
 
 def train_vgg16():
     train_dataset, valid_dataset = prepare_datasets(
-        "Dataset/extracted/train", "Dataset/extracted/val", config
+        "Dataset/cropped/train", "Dataset/cropped/val", config
     )
-    checkpoint_path, csv_log_path = build_config_paths(config)
-    model = create_model(config)
+
+    model_name = "vgg16"
+    checkpoint_path, csv_log_path = build_config_paths(config, model_name)
+
+    base_model = tf.keras.applications.vgg16.VGG16(
+        weights=None,
+        include_top=False,
+        input_shape=(224, 224, 3),
+    )
+
+    model = create_model(base_model, config)
     callbacks = create_callbacks(checkpoint_path, csv_log_path)
 
     model.fit(
