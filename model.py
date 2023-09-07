@@ -16,14 +16,14 @@ def build_config_paths(config, model_name):
 
 def create_callbacks(checkpoint_path, csv_log_path):
     early_stopping = tf.keras.callbacks.EarlyStopping(
-        monitor="val_loss", mode="min", patience=10
+        monitor="val_loss", mode="min", patience=8
     )
     csv_logger = tf.keras.callbacks.CSVLogger(csv_log_path, append=False)
     model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_path, save_weights_only=True, save_best_only=True, verbose=1
     )
     lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(
-        patience=5, monitor="val_loss", mode="min"
+        patience=6, monitor="val_loss", mode="min"
     )
 
     return [early_stopping, csv_logger, model_checkpoint, lr_scheduler]
