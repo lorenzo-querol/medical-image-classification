@@ -2,7 +2,7 @@ import tensorflow as tf
 from config import config
 import datetime
 import os
-from utils import prepare_datasets, create_model
+from utils import prepare_datasets, create_model, prepare_datasets_v2
 
 
 def build_config_paths(config, model_name):
@@ -30,11 +30,13 @@ def create_callbacks(checkpoint_path, csv_log_path):
 
 
 def train_vgg16():
-    train_dataset, valid_dataset = prepare_datasets(
-        "Dataset/cropped/train", "Dataset/cropped/val", config
-    )
+    # train_dataset, valid_dataset = prepare_datasets(
+    #     "Dataset/cropped/train", "Dataset/cropped/val", config
+    # )
 
-    model_name = "vgg16"
+    train_dataset, valid_dataset = prepare_datasets_v2("brain_tumor_dataset", config)
+
+    model_name = "other_dataset_vgg16"
     checkpoint_path, csv_log_path = build_config_paths(config, model_name)
 
     base_model = tf.keras.applications.vgg16.VGG16(

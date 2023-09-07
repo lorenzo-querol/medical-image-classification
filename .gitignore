@@ -161,4 +161,5 @@ cython_debug/
 
 Dataset/extracted/*
 Dataset/cropped/*
+brain_tumor_dataset/*
 checkpoints/*

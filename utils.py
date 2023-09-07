@@ -51,7 +51,7 @@ def create_model(base_model, config):
 
     model.compile(
         optimizer=tf.keras.optimizers.Adam(
-            ema_momentum=0.9, learning_rate=config["hparams"]["learning_rate"]
+            learning_rate=config["hparams"]["learning_rate"]
         ),
         loss=tf.keras.losses.BinaryCrossentropy(),
         metrics=metrics,
@@ -75,6 +75,23 @@ def prepare_datasets(train_path, valid_path, config):
         image_size=config["image_size"],
         batch_size=config["hparams"]["batch_size"],
         label_mode="binary",
+    )
+
+    AUTOTUNE = tf.data.AUTOTUNE
+    train_set = train_set.cache().prefetch(buffer_size=AUTOTUNE)
+    valid_set = valid_set.cache().prefetch(buffer_size=AUTOTUNE)
+
+    return train_set, valid_set
+
+
+def prepare_datasets_v2(path, config):
+    train_set, valid_set = tf.keras.utils.image_dataset_from_directory(
+        path,
+        seed=config["seed"],
+        image_size=config["image_size"],
+        batch_size=config["hparams"]["batch_size"],
+        label_mode="binary",
+        subset="both",
     )
 
     AUTOTUNE = tf.data.AUTOTUNE
