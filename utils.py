@@ -113,21 +113,6 @@ def prepare_datasets(path, config):
     return train_set, valid_set, test_set
 
 
-def get_class_distribution(split):
-    dataset_folder = f"Dataset/extracted/{split}"
-    class_folders = os.listdir(dataset_folder)
-    class_distribution = {}
-
-    for class_folder in class_folders:
-        if os.path.isdir(os.path.join(dataset_folder, class_folder)):
-            num_samples = len(os.listdir(os.path.join(dataset_folder, class_folder)))
-            class_distribution[class_folder] = num_samples
-
-    print(f"Class Distribution of {split}")
-    for class_label, num_samples in class_distribution.items():
-        print(f"{class_label}: {num_samples} samples")
-
-
 def gradCam(m, image, true_label, layer_conv_name):
     model_grad = tf.keras.models.Model(
         inputs=m.input, outputs=[m.get_layer(layer_conv_name).output, m.output]

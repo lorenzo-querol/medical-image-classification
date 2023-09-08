@@ -32,7 +32,7 @@ def create_callbacks(checkpoint_path, csv_log_path):
 
 
 def train_vgg16():
-    train_dataset, valid_dataset, _ = prepare_datasets("cropped", config)
+    train_dataset, valid_dataset, _ = prepare_datasets("cropped_dataset", config)
 
     model_name = "DenseNet121"
     checkpoint_path, csv_log_path = build_config_paths(config, model_name)

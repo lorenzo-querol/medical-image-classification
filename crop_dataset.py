@@ -27,8 +27,8 @@ def crop_and_resize(image, target_size=(224, 224), negative_space_color=(0, 0, 0
     return resized
 
 
-base_dir = "Brain Tumor Data Set"
-save_base_dir = "cropped"
+base_dir = "raw_dataset"
+save_base_dir = "cropped_dataset"
 
 if not os.path.exists(save_base_dir):
     os.makedirs(save_base_dir)
