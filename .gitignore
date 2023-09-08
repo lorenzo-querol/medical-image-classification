@@ -163,3 +163,5 @@ Dataset/extracted/*
 Dataset/cropped/*
 brain_tumor_dataset/*
 checkpoints/*
+Brain Tumor Data Set/*
+cropped/*

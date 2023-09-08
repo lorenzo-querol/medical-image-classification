@@ -2,11 +2,13 @@ import tensorflow as tf
 from config import config
 import datetime
 import os
-from utils import prepare_datasets, create_model, prepare_datasets_v2
+from utils import prepare_datasets, create_model
 
 
 def build_config_paths(config, model_name):
-    filename = f"{model_name}_{datetime.datetime.now()}_e{config['hparams']['epochs']}_lr{config['hparams']['learning_rate']}_bs{config['hparams']['batch_size']}"
+    current_time = datetime.datetime.now()
+    timestamp = current_time.strftime("%Y%m%d_%H%M%S")
+    filename = f"{model_name}_{timestamp}_E{config['hparams']['epochs']}_LR{config['hparams']['learning_rate']}_DR{config['hparams']['dropout_rate']}"
     checkpoint_dir = f"checkpoints/{filename}"
     os.makedirs(checkpoint_dir, exist_ok=True)
     checkpoint_path = f"{checkpoint_dir}/cp-{{epoch:04d}}.ckpt"
@@ -30,19 +32,13 @@ def create_callbacks(checkpoint_path, csv_log_path):
 
 
 def train_vgg16():
-    # train_dataset, valid_dataset = prepare_datasets(
-    #     "Dataset/cropped/train", "Dataset/cropped/val", config
-    # )
+    train_dataset, valid_dataset, _ = prepare_datasets("cropped", config)
 
-    train_dataset, valid_dataset = prepare_datasets_v2("brain_tumor_dataset", config)
-
-    model_name = "other_dataset_vgg16"
+    model_name = "DenseNet121"
     checkpoint_path, csv_log_path = build_config_paths(config, model_name)
 
-    base_model = tf.keras.applications.vgg16.VGG16(
-        weights=None,
-        include_top=False,
-        input_shape=(224, 224, 3),
+    base_model = tf.keras.applications.DenseNet121(
+        weights="imagenet", include_top=False, input_shape=(224, 224, 3), pooling=None
     )
 
     model = create_model(base_model, config)

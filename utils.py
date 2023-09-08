@@ -1,5 +1,7 @@
 import os
 import tensorflow as tf
+import cv2
+import numpy as np
 
 
 def create_data_augmentation():
@@ -8,8 +10,6 @@ def create_data_augmentation():
             tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal"),
             tf.keras.layers.experimental.preprocessing.RandomRotation(0.1),
             tf.keras.layers.experimental.preprocessing.RandomZoom(0.1),
-            tf.keras.layers.experimental.preprocessing.RandomContrast(factor=0.1),
-            tf.keras.layers.RandomBrightness(factor=0.1),
             tf.keras.layers.experimental.preprocessing.RandomTranslation(
                 height_factor=0.1, width_factor=0.1
             ),
@@ -29,40 +29,53 @@ def create_metrics():
 def create_model(base_model, config):
     data_augmentation = create_data_augmentation()
 
-    # Preprocess and augment the data
-    input_tensor = tf.keras.layers.Input(shape=(224, 224, 3))
-    x = data_augmentation(input_tensor)
-    x = tf.keras.layers.experimental.preprocessing.Rescaling(1.0 / 255)(x)
+    model = tf.keras.Sequential()
 
-    # # Pass through the feature extractor
-    x = base_model(x)
+    # Preprocessing: Data augmentation and normalization
+    model.add(tf.keras.layers.InputLayer(input_shape=(224, 224, 3)))
+    model.add(data_augmentation)
+    model.add(tf.keras.layers.experimental.preprocessing.Rescaling(1.0 / 255))
 
-    # Fully connected layer
-    x = tf.keras.layers.GlobalAveragePooling2D()(x)
-    x = tf.keras.layers.Dropout(0.8, seed=config["seed"])(x)
-    x = tf.keras.layers.Dense(1, activation="sigmoid")(
-        x
-    )  # Replace with sigmoid instead of softmax since binary classification
+    # Feature extraction: base model
+    model.add(base_model)
 
-    # Compile the model
-    model = tf.keras.models.Model(inputs=input_tensor, outputs=x)
+    # Fully connected layers: Dropout and Batch Norm
+    model.add(tf.keras.layers.Flatten())
+    model.add(
+        tf.keras.layers.Dropout(
+            config["hparams"]["dropout_rate_1"], seed=config["seed"]
+        )
+    )
+    model.add(tf.keras.layers.BatchNormalization())
+    model.add(tf.keras.layers.Dense(16, activation="relu"))
+    model.add(
+        tf.keras.layers.Dropout(
+            config["hparams"]["dropout_rate_2"], seed=config["seed"]
+        )
+    )
+    model.add(tf.keras.layers.BatchNormalization())
+    # Change to Sigmoid activation for binary classification
+    model.add(tf.keras.layers.Dense(1, activation="sigmoid"))
 
+    # Compile model
     metrics = create_metrics()
-
     model.compile(
         optimizer=tf.keras.optimizers.Adam(
             learning_rate=config["hparams"]["learning_rate"]
         ),
-        loss=tf.keras.losses.BinaryCrossentropy(),
+        loss="binary_crossentropy",
         metrics=metrics,
     )
 
     return model
 
 
-def prepare_datasets(train_path, valid_path, config):
+def prepare_datasets(path, config):
     train_set = tf.keras.utils.image_dataset_from_directory(
-        train_path,
+        directory=path,
+        validation_split=0.3,
+        subset="training",
+        color_mode="rgb",
         seed=config["seed"],
         image_size=config["image_size"],
         batch_size=config["hparams"]["batch_size"],
@@ -70,8 +83,23 @@ def prepare_datasets(train_path, valid_path, config):
     )
 
     valid_set = tf.keras.utils.image_dataset_from_directory(
-        valid_path,
+        directory=path,
+        validation_split=0.2 / 0.3,
+        subset="validation",
+        color_mode="rgb",
         seed=config["seed"],
+        image_size=config["image_size"],
+        batch_size=config["hparams"]["batch_size"],
+        label_mode="binary",
+    )
+
+    test_set = tf.keras.utils.image_dataset_from_directory(
+        directory=path,
+        validation_split=0.1 / 0.3,
+        subset="validation",
+        color_mode="rgb",
+        seed=config["seed"]
+        + 1,  # Use a different seed to ensure no overlap with validation set
         image_size=config["image_size"],
         batch_size=config["hparams"]["batch_size"],
         label_mode="binary",
@@ -80,25 +108,9 @@ def prepare_datasets(train_path, valid_path, config):
     AUTOTUNE = tf.data.AUTOTUNE
     train_set = train_set.cache().prefetch(buffer_size=AUTOTUNE)
     valid_set = valid_set.cache().prefetch(buffer_size=AUTOTUNE)
+    test_set = test_set.cache().prefetch(buffer_size=AUTOTUNE)
 
-    return train_set, valid_set
-
-
-def prepare_datasets_v2(path, config):
-    train_set, valid_set = tf.keras.utils.image_dataset_from_directory(
-        path,
-        seed=config["seed"],
-        image_size=config["image_size"],
-        batch_size=config["hparams"]["batch_size"],
-        label_mode="binary",
-        subset="both",
-    )
-
-    AUTOTUNE = tf.data.AUTOTUNE
-    train_set = train_set.cache().prefetch(buffer_size=AUTOTUNE)
-    valid_set = valid_set.cache().prefetch(buffer_size=AUTOTUNE)
-
-    return train_set, valid_set
+    return train_set, valid_set, test_set
 
 
 def get_class_distribution(split):
@@ -114,3 +126,40 @@ def get_class_distribution(split):
     print(f"Class Distribution of {split}")
     for class_label, num_samples in class_distribution.items():
         print(f"{class_label}: {num_samples} samples")
+
+
+def gradCam(m, image, true_label, layer_conv_name):
+    model_grad = tf.keras.models.Model(
+        inputs=m.input, outputs=[m.get_layer(layer_conv_name).output, m.output]
+    )
+
+    with tf.GradientTape() as tape:
+        conv_output, predictions = model_grad(image)
+        tape.watch(conv_output)
+        loss = tf.losses.binary_crossentropy(true_label, predictions)
+
+    grad = tape.gradient(loss, conv_output)
+    grad = tf.keras.backend.mean(tf.abs(grad), axis=(0, 1, 2))
+    conv_output = np.squeeze(conv_output.numpy())
+
+    for i in range(conv_output.shape[-1]):
+        conv_output[:, :, i] = conv_output[:, :, i] * grad[i]
+
+    heatmap = tf.reduce_mean(conv_output, axis=-1)
+    heatmap = np.maximum(heatmap, 0)
+    heatmap = heatmap / tf.reduce_max(heatmap)
+    heatmap = cv2.resize(heatmap.numpy(), (224, 224))
+
+    return np.squeeze(heatmap), np.squeeze(image)
+
+
+def getHeatMap(m, images, labels):
+    heatmaps = []
+
+    for index in range(16):
+        heatmap, _ = gradCam(
+            m, images[index : index + 1], labels[index : index + 1], "relu"
+        )
+        heatmaps.append(heatmap)
+
+    return np.array(heatmaps)
