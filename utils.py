@@ -138,10 +138,10 @@ def gradCam(m, image, true_label, layer_conv_name):
     return np.squeeze(heatmap), np.squeeze(image)
 
 
-def getHeatMap(m, images, labels):
+def getHeatMap(m, images, labels, num_samples):
     heatmaps = []
 
-    for index in range(16):
+    for index in range(num_samples):
         heatmap, _ = gradCam(
             m, images[index : index + 1], labels[index : index + 1], "relu"
         )
